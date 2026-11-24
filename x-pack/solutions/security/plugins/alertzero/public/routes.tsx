@@ -12,6 +12,7 @@ import { useAlertZeroInvestigationsCapabilities } from './hooks/use_alertzero_in
 import { EscalationsPage } from './pages/escalations';
 import { WatchesRoutes } from './pages/watches/routes';
 import { LandingPage } from './pages/landing_page';
+import { DemoPage } from './pages/demo/demo_page';
 
 /**
  * Renders the escalations page only when the current user has the `showEscalations`
@@ -33,6 +34,16 @@ const EscalationsRoute: React.FC = () => {
  */
 export const AlertZeroRoutes: React.FC = () => (
   <Routes>
+    {process.env.NODE_ENV === 'development' && <Route path="/poc" exact component={DemoPage} />}
+    {process.env.NODE_ENV === 'development' && (
+      <Route path="/poc-next" exact render={() => <Redirect to="/poc" />} />
+    )}
+    {process.env.NODE_ENV === 'development' && (
+      <Route path="/watches/configuration-preview" exact component={DemoPage} />
+    )}
+    {process.env.NODE_ENV === 'development' && (
+      <Route path="/watches/configuration-preview-next" exact component={DemoPage} />
+    )}
     <Route path="/" exact component={LandingPage} />
     <Route path="/escalations" exact component={EscalationsRoute} />
     <Route path="/watches" component={WatchesRoutes} />

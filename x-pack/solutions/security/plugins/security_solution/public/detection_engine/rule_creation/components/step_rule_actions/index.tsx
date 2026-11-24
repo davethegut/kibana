@@ -8,6 +8,7 @@
 import { EuiForm, EuiSpacer, EuiText, EuiTitle } from '@elastic/eui';
 import type { FC } from 'react';
 import React, { memo, useMemo } from 'react';
+import { css } from '@emotion/react';
 import { FormattedMessage } from '@kbn/i18n-react';
 
 import type {
@@ -40,6 +41,8 @@ interface StepRuleActionsProps extends RuleStepProps {
   form: FormHook<ActionsStepRule>;
   ruleInterval: string | undefined;
   onNewConnectorCreated?: (connector: ActionConnector) => void;
+  beforeActions?: React.ReactNode;
+  actionsDisabled?: boolean;
 }
 
 interface StepRuleActionsReadOnlyProps {
@@ -72,6 +75,27 @@ const DisplayActionsHeader = () => {
   );
 };
 
+const OptionalDisabledActions: FC<{ disabled: boolean; children: React.ReactNode }> = ({
+  disabled,
+  children,
+}) =>
+  disabled ? (
+    <fieldset
+      disabled
+      css={css`
+        border: 0;
+        padding: 0;
+        margin: 0;
+        min-width: 0;
+        opacity: 0.55;
+      `}
+    >
+      {children}
+    </fieldset>
+  ) : (
+    <>{children}</>
+  );
+
 const StepRuleActionsComponent: FC<StepRuleActionsProps> = ({
   ruleId,
   ruleTypeId,
@@ -81,6 +105,8 @@ const StepRuleActionsComponent: FC<StepRuleActionsProps> = ({
   form,
   ruleInterval,
   onNewConnectorCreated,
+  beforeActions,
+  actionsDisabled = false,
 }) => {
   const {
     services: { application },
@@ -122,11 +148,16 @@ const StepRuleActionsComponent: FC<StepRuleActionsProps> = ({
     return application.capabilities.actions.show ? (
       <>
         <DisplayActionsHeader />
-        {ruleId && <RuleSnoozeSection ruleId={ruleId} />}
-        {displayActionsOptions}
-        {displayResponseActionsOptions}
-        <UseField path="kibanaSiemAppUrl" component={GhostFormField} />
-        <UseField path="enabled" component={GhostFormField} />
+        <OptionalDisabledActions disabled={actionsDisabled}>
+          {ruleId && <RuleSnoozeSection ruleId={ruleId} />}
+        </OptionalDisabledActions>
+        {beforeActions}
+        <OptionalDisabledActions disabled={actionsDisabled}>
+          {displayActionsOptions}
+          {displayResponseActionsOptions}
+          <UseField path="kibanaSiemAppUrl" component={GhostFormField} />
+          <UseField path="enabled" component={GhostFormField} />
+        </OptionalDisabledActions>
       </>
     ) : (
       <>
@@ -135,6 +166,8 @@ const StepRuleActionsComponent: FC<StepRuleActionsProps> = ({
     );
   }, [
     ruleId,
+    beforeActions,
+    actionsDisabled,
     application.capabilities.actions.show,
     displayActionsOptions,
     displayResponseActionsOptions,

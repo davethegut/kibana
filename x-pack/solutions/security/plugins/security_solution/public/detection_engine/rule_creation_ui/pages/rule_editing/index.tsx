@@ -5,12 +5,20 @@
  * 2.0.
  */
 
-import { EuiCallOut, EuiFlexGroup, EuiLink, EuiResizableContainer, EuiSpacer } from '@elastic/eui';
+import {
+  EuiButtonEmpty,
+  EuiCallOut,
+  EuiFlexGroup,
+  EuiLink,
+  EuiResizableContainer,
+  EuiSpacer,
+} from '@elastic/eui';
+import { KbnInfoCallout } from '@kbn/ui-callout';
 import { FormattedMessage } from '@kbn/i18n-react';
 import type { AppHeaderTab } from '@kbn/app-header';
 import type { FC } from 'react';
 import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useHistory, useLocation, useParams } from 'react-router-dom';
 import { ruleTypeMappings } from '@kbn/securitysolution-rules';
 import { ENDPOINT_ARTIFACT_LISTS } from '@kbn/securitysolution-list-constants';
 import { useGetEndpointExceptionsPerPolicyOptIn } from '../../../../management/hooks/artifacts/use_endpoint_per_policy_opt_in';
@@ -72,10 +80,41 @@ import { PAGE_TITLE as RULE_DETAILS_PAGE_TITLE } from '../../../rule_details_ui/
 import { useAgentBuilderRuleCreation } from '../rule_creation/hooks/use_agent_builder_rule_creation';
 import { RuleCreationEventTypes } from '../../../../common/lib/telemetry/types';
 import { EditRuleFormButtons } from './edit_rule_form_buttons';
+import { SecurityAppHeader } from '../../../../common/components/app_header';
+import { submitRuleEditor, useAlertZeroRulePreview } from './alertzero_preview';
+import { AlertZeroPreviewPanel } from './alertzero_preview_panel';
 
 const EditRulePageComponent: FC<{ rule: RuleResponse }> = ({ rule }) => {
   const { addSuccess } = useAppToasts();
-  const { application, triggersActionsUi, telemetry, aiRuleCreation } = useKibana().services;
+  const { application, triggersActionsUi, telemetry, aiRuleCreation, http } = useKibana().services;
+  const history = useHistory();
+  const location = useLocation();
+  const isAlertZeroPreview =
+    process.env.NODE_ENV === 'development' &&
+    new URLSearchParams(location.search).get('alertZeroPreview') === 'true';
+  const previewRule = useMemo(
+    () => ({
+      id: rule.id,
+      label: rule.name,
+      enabled: rule.enabled,
+      alertsLast24h: 0,
+      category: 'Detection Rules',
+    }),
+    [rule.id, rule.name, rule.enabled]
+  );
+  const alertZeroPreview = useAlertZeroRulePreview(
+    previewRule,
+    http.basePath.get(),
+    isAlertZeroPreview
+  );
+  const alertZeroConfigurationUrl = http.basePath.prepend(
+    `/app/alertzero/watches/configuration-preview-next?ruleId=${encodeURIComponent(rule.id)}`
+  );
+  const startAlertZeroPreview = useCallback(() => {
+    const search = new URLSearchParams(location.search);
+    search.set('alertZeroPreview', 'true');
+    history.push({ ...location, search: search.toString() });
+  }, [history, location]);
   const { navigateToApp } = application;
   const [{ loading: userInfoLoading, isSignalIndexExists, isAuthenticated, hasEncryptionKey }] =
     useUserData();
@@ -101,6 +140,7 @@ const EditRulePageComponent: FC<{ rule: RuleResponse }> = ({ rule }) => {
   const { detailName: ruleId } = useParams<{ detailName: string }>();
 
   const getStartingActiveStep = () => {
+    if (isAlertZeroPreview) return RuleStep.ruleActions;
     if (isRuleEditable) {
       return canEditRules ? RuleStep.defineRule : RuleStep.aboutRule;
     } else {
@@ -110,7 +150,7 @@ const EditRulePageComponent: FC<{ rule: RuleResponse }> = ({ rule }) => {
 
   const [activeStep, setActiveStep] = useState<RuleStep>(getStartingActiveStep());
   const { mutateAsync: updateRule, isLoading } = useUpdateRule();
-  const [isRulePreviewVisible, setIsRulePreviewVisible] = useState(true);
+  const [isRulePreviewVisible, setIsRulePreviewVisible] = useState(!isAlertZeroPreview);
   const collapseFn = useRef<() => void | undefined>();
   const [isQueryBarValid, setIsQueryBarValid] = useState(false);
 
@@ -230,7 +270,7 @@ const EditRulePageComponent: FC<{ rule: RuleResponse }> = ({ rule }) => {
         'data-test-subj': 'edit-rule-define-tab',
         id: RuleStep.defineRule,
         name: ruleI18n.DEFINITION,
-        disabled: !isRuleEditable || !canEditRules,
+        disabled: isAlertZeroPreview || !isRuleEditable || !canEditRules,
         tooltip: customizationDisabledTooltip,
         content: (
           <div
@@ -270,7 +310,7 @@ const EditRulePageComponent: FC<{ rule: RuleResponse }> = ({ rule }) => {
         'data-test-subj': 'edit-rule-about-tab',
         id: RuleStep.aboutRule,
         name: ruleI18n.ABOUT,
-        disabled: !isRuleEditable,
+        disabled: isAlertZeroPreview || !isRuleEditable,
         tooltip: customizationDisabledTooltip,
         content: (
           <div
@@ -304,7 +344,7 @@ const EditRulePageComponent: FC<{ rule: RuleResponse }> = ({ rule }) => {
         'data-test-subj': 'edit-rule-schedule-tab',
         id: RuleStep.scheduleRule,
         name: ruleI18n.SCHEDULE,
-        disabled: !isRuleEditable || !canEditRules,
+        disabled: isAlertZeroPreview || !isRuleEditable || !canEditRules,
         tooltip: customizationDisabledTooltip,
         content: (
           <div
@@ -341,6 +381,33 @@ const EditRulePageComponent: FC<{ rule: RuleResponse }> = ({ rule }) => {
             <StepPanel loading={loading}>
               {actionsStepData != null && (
                 <StepRuleActions
+                  beforeActions={
+                    isAlertZeroPreview ? (
+                      <AlertZeroPreviewPanel
+                        rule={previewRule}
+                        scope={alertZeroPreview.state.scope}
+                        included={alertZeroPreview.included}
+                        saved={alertZeroPreview.saved}
+                        storageError={alertZeroPreview.storageError}
+                        scopeChanged={alertZeroPreview.scopeChanged}
+                        configurationUrl={alertZeroConfigurationUrl}
+                        onChange={alertZeroPreview.changeIncluded}
+                      />
+                    ) : process.env.NODE_ENV === 'development' ? (
+                      <EuiButtonEmpty
+                        size="s"
+                        iconType="flask"
+                        data-test-subj="ruleEditPreviewAlertZeroSetup"
+                        onClick={startAlertZeroPreview}
+                      >
+                        <FormattedMessage
+                          id="xpack.securitySolution.ruleEdit.alertZeroPreview.launch"
+                          defaultMessage="Preview AlertZero setup"
+                        />
+                      </EuiButtonEmpty>
+                    ) : undefined
+                  }
+                  actionsDisabled={isAlertZeroPreview}
                   ruleId={rule?.id}
                   ruleTypeId={ruleTypeMappings[rule?.type]}
                   isLoading={isLoading}
@@ -361,6 +428,16 @@ const EditRulePageComponent: FC<{ rule: RuleResponse }> = ({ rule }) => {
     ],
     [
       isRuleEditable,
+      isAlertZeroPreview,
+      previewRule,
+      alertZeroPreview.state.scope,
+      alertZeroPreview.included,
+      alertZeroPreview.saved,
+      alertZeroPreview.storageError,
+      alertZeroPreview.scopeChanged,
+      alertZeroPreview.changeIncluded,
+      alertZeroConfigurationUrl,
+      startAlertZeroPreview,
       canEditRules,
       customizationDisabledTooltip,
       activeStep,
@@ -469,7 +546,7 @@ const EditRulePageComponent: FC<{ rule: RuleResponse }> = ({ rule }) => {
     updateRule,
   ]);
 
-  const onSubmit = useCallback(async () => {
+  const onSubmitRule = useCallback(async () => {
     const actionsStepFormValid = await actionsStepForm.validate();
     if (!isRuleEditable) {
       // Since users cannot edit Define, About and Schedule tabs of the rule, we skip validation of those to avoid
@@ -522,6 +599,25 @@ const EditRulePageComponent: FC<{ rule: RuleResponse }> = ({ rule }) => {
     confirmValidationErrors,
     saveChanges,
   ]);
+
+  const onSubmit = useCallback(
+    () =>
+      submitRuleEditor({
+        isAlertZeroPreview,
+        savePreview: alertZeroPreview.save,
+        saveRule: onSubmitRule,
+      }),
+    [isAlertZeroPreview, alertZeroPreview.save, onSubmitRule]
+  );
+
+  const { discard: discardAlertZeroPreview } = alertZeroPreview;
+  const cancelAlertZeroPreview = useCallback(
+    (ev: React.SyntheticEvent) => {
+      ev.preventDefault();
+      discardAlertZeroPreview();
+    },
+    [discardAlertZeroPreview]
+  );
 
   const goToDetailsRule = useCallback(
     (ev: React.SyntheticEvent) => {
@@ -595,6 +691,47 @@ const EditRulePageComponent: FC<{ rule: RuleResponse }> = ({ rule }) => {
       path: getRuleDetailsUrl(ruleId ?? ''),
     });
     return null;
+  }
+
+  if (isAlertZeroPreview) {
+    return (
+      <SecuritySolutionPageWrapper>
+        <SecurityAppHeader
+          title={i18n.PAGE_TITLE}
+          back={back}
+          tabs={headerTabs}
+          spacing="largeBleed"
+        />
+        <EuiFlexGroup direction="row" justifyContent="spaceAround">
+          <MaxWidthEuiFlexItem>
+            <KbnInfoCallout
+              size="s"
+              title={
+                <FormattedMessage
+                  id="xpack.securitySolution.ruleEdit.alertZeroPreview.notice"
+                  defaultMessage="Local preview · Save changes updates only this rule's AlertZero association. The real rule, notifications and response actions are unchanged."
+                />
+              }
+            />
+            {tabs.find(({ id }) => id === RuleStep.ruleActions)?.content}
+            <EuiSpacer />
+            <EuiFlexGroup
+              alignItems="center"
+              gutterSize="s"
+              justifyContent="flexEnd"
+              responsive={false}
+            >
+              <EditRuleFormButtons
+                onCancel={cancelAlertZeroPreview}
+                onSubmit={onSubmit}
+                isLoading={false}
+                isDisabled={loading || actionsStepData == null}
+              />
+            </EuiFlexGroup>
+          </MaxWidthEuiFlexItem>
+        </EuiFlexGroup>
+      </SecuritySolutionPageWrapper>
+    );
   }
 
   return (
