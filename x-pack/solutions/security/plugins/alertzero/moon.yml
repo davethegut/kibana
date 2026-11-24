@@ -69,6 +69,7 @@ dependsOn:
   - '@kbn/utility-types'
   - '@kbn/es-query'
   - '@kbn/ui-callout'
+  - '@kbn/ui-ai-components'
   - '@kbn/core-http-browser-mocks'
   - '@kbn/core-application-browser'
   - '@kbn/security-solution-distribution-bar'

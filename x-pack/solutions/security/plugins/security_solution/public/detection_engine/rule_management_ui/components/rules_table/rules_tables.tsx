@@ -24,6 +24,7 @@ import type { EuiBasicTableOnChange } from '../../../common/types';
 import { BulkActionDryRunConfirmation } from './bulk_actions/bulk_action_dry_run_confirmation';
 import { BulkEditFlyout } from './bulk_actions/bulk_edit_flyout';
 import { useBulkActions } from './bulk_actions/use_bulk_actions';
+import { useAlertZeroPreviewBulkActions } from './bulk_actions/use_alertzero_preview_bulk_actions';
 import { useBulkActionsConfirmation } from './bulk_actions/use_bulk_actions_confirmation';
 import { useBulkActionsDryRun } from './bulk_actions/use_bulk_actions_dry_run';
 import { useBulkEditFormFlyout } from './bulk_actions/use_bulk_edit_form_flyout';
@@ -182,6 +183,9 @@ export const RulesTables = React.memo<RulesTableProps>(({ selectedTab }) => {
     completeBulkEditForm,
     executeBulkActionsDryRun,
   });
+  const getBulkItemsWithAlertZeroPreview = useAlertZeroPreviewBulkActions(
+    getBulkItemsPopoverContent
+  );
 
   const paginationMemo = useMemo(() => {
     return {
@@ -386,7 +390,7 @@ export const RulesTables = React.memo<RulesTableProps>(({ selectedTab }) => {
           <RulesTableWarnings warnings={warnings} />
           <RulesTableUtilityBar
             canBulkEdit={canReadRules}
-            onGetBulkItemsPopoverContent={getBulkItemsPopoverContent}
+            onGetBulkItemsPopoverContent={getBulkItemsWithAlertZeroPreview}
             onToggleSelectAll={toggleSelectAll}
             isBulkActionInProgress={isBulkActionsDryRunLoading || loadingRulesAction != null}
           />
